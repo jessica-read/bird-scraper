@@ -3,14 +3,16 @@ import requests
 import re
 from pprint import pprint
 
-def parse_bird_sightings(html_content):
-    soup = BeautifulSoup(html_content, 'lxml')
+def parse_bird_sightings(notts_birders_content):
+    bird_soup = BeautifulSoup(notts_birders_content, 'lxml')
     sightings = []
 
-    for h2 in soup.find_all('h2', class_='main_content_title'):
+    #iterates through h2 tags
+    for h2 in bird_soup.find_all('h2', class_='main_content_title'):
         date = h2.get_text(strip=True)
         current = h2.find_next_sibling()
 
+        #while the tag is h2 and the class is not main_content_title
         while current and not (current.name == 'h2' and 'main_content_title' in current.get('class', [])):
             if current.name == 'p':
                 # Get location from <span class="style19"><strong>
