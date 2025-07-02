@@ -1,51 +1,69 @@
 from bs4 import BeautifulSoup
 import requests
+import re
+from pprint import pprint
 
-def parse_bird_sightings(notts_birders_content):
-    bird_soup = BeautifulSoup(notts_birders_content, 'lxml')
+def parse_bird_sightings(html_content):
+    soup = BeautifulSoup(html_content, 'lxml')
     sightings = []
 
-    # iterates through h2 tags holding the dates
-    for h2 in bird_soup.find_all('h2', class_='main_content_title'):
+    for h2 in soup.find_all('h2', class_='main_content_title'):
         date = h2.get_text(strip=True)
         current = h2.find_next_sibling()
 
-        # while the next line is not h2
         while current and not (current.name == 'h2' and 'main_content_title' in current.get('class', [])):
             if current.name == 'p':
-                # Identify location from span.style19 > strong
+                # Get location from <span class="style19"><strong>
                 location = None
                 location_span = current.find('span', class_='style19')
+                location_tag = None
+
                 if location_span:
                     strong_in_span = location_span.find('strong')
                     if strong_in_span:
                         location = strong_in_span.text.strip()
+                        location_tag = strong_in_span
 
                 if not location:
                     current = current.find_next_sibling()
                     continue
 
                 bird_entries = []
+                last_number = None
 
-                for element in current.find_all(['span', 'strong']):
-                    # Skip the location strong tag
-                    if element.name == 'strong' and element in location_span.find_all('strong'):
+                for element in current.contents:
+                    # Track counts that are strings with numbers
+                    if isinstance(element, str):
+                        numbers = re.findall(r'\b\d+\b', element)
+                        last_number = int(numbers[0]) if numbers else None
                         continue
 
-                    bird_name = element.get_text(strip=True)
-
-                    if element.name == 'strong':
-                        rarity = 'unconfirmed'
-                    elif 'style6' in element.get('class', []):
-                        rarity = 'interesting'
-                    elif 'style47' in element.get('class', []):
-                        rarity = 'rare'
-                    elif 'style96' in element.get('class', []):
-                        rarity = 'very rare'
-                    else:
+                    # Skip the <strong> that is part of the location
+                    if element == location_tag:
                         continue
 
-                    bird_entries.append({'name': bird_name, 'rarity': rarity})
+                    # Only process span and strong tags
+                    if element.name in ['span', 'strong']:
+                        bird_name = element.get_text(strip=True).title()
+
+                        if element.name == 'strong':
+                            rarity = 'unconfirmed'
+                        elif 'style6' in element.get('class', []):
+                            rarity = 'interesting'
+                        elif 'style47' in element.get('class', []):
+                            rarity = 'rare'
+                        elif 'style96' in element.get('class', []):
+                            rarity = 'very rare'
+                        else:
+                            continue
+
+                        bird_entries.append({
+                            'species': bird_name,
+                            'count': last_number if last_number is not None else 'No count specified',
+                            'rarity': rarity
+                        })
+
+                        last_number = None  # Reset after using it
 
                 if bird_entries:
                     sightings.append({
@@ -61,6 +79,7 @@ def parse_bird_sightings(notts_birders_content):
 
 
 
+
 # Fetch HTML from the website
 url = "https://www.nottsbirders.net/latest_sightings.html"
 response = requests.get(url)
@@ -68,6 +87,6 @@ response = requests.get(url)
 if response.status_code == 200:
     notts_birders_content = response.text #content from the notts birders website
     organised_data = parse_bird_sightings(notts_birders_content)
-    print(organised_data)
+    pprint(organised_data)
 else:
     print("Failed to retrieve page:", response.status_code)
